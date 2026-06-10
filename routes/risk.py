@@ -105,13 +105,13 @@ def analyze_risk():
             }
         )
 
-    # ── Sensor: prolonged stillness (stillSeconds ≥ 6) ──
-    if sensor.get("stillSeconds", 0) >= 6:
+    # ── Sensor: prolonged stillness after fall (stillSeconds ≥ 5) ──
+    if sensor.get("stillSeconds", 0) >= 5:
         score += 15
         reasons.append(
             {
                 "type": "sensor",
-                "label": "检测到持续静止",
+                "label": "摔倒后持续静止",
                 "detail": f"用户持续静止 {sensor.get('stillSeconds')} 秒",
                 "score": 15,
             }
