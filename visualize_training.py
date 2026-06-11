@@ -283,6 +283,194 @@ plt.close()
 print("  -> models/fall_three_step.png")
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 图表 7: 轨迹模型 — 混淆矩阵
+# ═══════════════════════════════════════════════════════════════════════════════
+print("[7/9] 生成轨迹模型混淆矩阵...")
+
+cm_track = np.array([[200, 0], [0, 200]])
+labels_t = ["正常", "异常"]
+
+fig, ax = plt.subplots(figsize=(6, 5))
+im = ax.imshow(cm_track, cmap="Purples", vmin=0, vmax=220)
+
+ax.set_xticks([0, 1])
+ax.set_yticks([0, 1])
+ax.set_xticklabels(labels_t, fontsize=14)
+ax.set_yticklabels(labels_t, fontsize=14)
+ax.set_xlabel("预测标签", fontsize=14)
+ax.set_ylabel("真实标签", fontsize=14)
+ax.set_title("异常轨迹检测 — 混淆矩阵\n(准确率 100% | F1 100%)", fontsize=15, fontweight="bold")
+
+for i in range(2):
+    for j in range(2):
+        color = "white" if cm_track[i, j] > 110 else "black"
+        ax.text(j, i, str(cm_track[i, j]), ha="center", va="center",
+                fontsize=22, fontweight="bold", color=color)
+
+fig.colorbar(im, ax=ax, shrink=0.8)
+plt.tight_layout()
+plt.savefig("models/track_confusion_matrix.png", bbox_inches="tight")
+plt.close()
+print("  -> models/track_confusion_matrix.png")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 图表 8: 轨迹模型 — Top-15 特征重要性
+# ═══════════════════════════════════════════════════════════════════════════════
+print("[8/9] 生成轨迹模型特征重要性...")
+
+track_features = [
+    ("路径效率", 0.2432), ("偏离角", 0.1545), ("最大加速度", 0.0932),
+    ("平均航向变化", 0.0552), ("航向变化标准差", 0.0541), ("平均加速度", 0.0485),
+    ("95分位速度", 0.0390), ("路线平滑度", 0.0367), ("最大速度", 0.0353),
+    ("速度标准差", 0.0349), ("最大航向变化", 0.0314), ("总体位移", 0.0307),
+    ("最小速度", 0.0280), ("停留段数", 0.0183), ("平均停留段长", 0.0156),
+]
+names_t, imps_t = zip(*track_features[::-1])
+
+fig, ax = plt.subplots(figsize=(8, 5))
+bar_colors_t = ["#8E44AD" if "偏离" in n or "航向" in n else "#E67E22" if "速度" in n or "加速度" in n else "#3498DB" for n in names_t]
+ax.barh(names_t, imps_t, color=bar_colors_t, edgecolor="white", height=0.6)
+ax.set_xlabel("特征重要性 (Gini Importance)", fontsize=12)
+ax.set_title("异常轨迹检测 — Top-15 重要特征\n(Random Forest 特征重要性)", fontsize=14, fontweight="bold")
+for i, (n, w) in enumerate(zip(names_t, imps_t)):
+    ax.text(w + 0.003, i, f"{w:.4f}", va="center", fontsize=9)
+ax.set_xlim(0, max(imps_t) * 1.4)
+plt.tight_layout()
+plt.savefig("models/track_features.png", bbox_inches="tight")
+plt.close()
+print("  -> models/track_features.png")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 图表 9: 轨迹样本可视化 — 正常 vs 4类异常
+# ═══════════════════════════════════════════════════════════════════════════════
+print("[9/9] 生成轨迹类型对比图...")
+
+np.random.seed(42)
+
+def gen_track_data():
+    SAMPLING_INTERVAL = 1.0
+    POINTS_PER_TRACK = 60
+    route = []
+    lng, lat = 110.152, 19.998
+    for i in range(POINTS_PER_TRACK):
+        lng += np.random.normal(0, 0.00005)
+        lat += np.random.normal(0, 0.00005)
+        route.append((lng, lat))
+
+    def make_normal():
+        pts = []
+        spd = 1.0
+        for i in range(POINTS_PER_TRACK):
+            spd = spd + np.random.normal(0, 0.1)
+            spd = max(0.3, min(2.0, spd))
+            bearing = np.arctan2(route[i][0] - route[i-1][0], route[i][1] - route[i-1][1]) if i > 0 else 0
+            l = route[i][0] + spd * 0.3 * np.sin(bearing) * 0.00001
+            la = route[i][1] + spd * 0.3 * np.cos(bearing) * 0.00001
+            pts.append((l, la))
+        return pts
+
+    def make_deviation():
+        pts = []
+        l, la = route[0]
+        for i in range(POINTS_PER_TRACK):
+            if i < 25:
+                bearing = np.arctan2(route[i][0] - route[i-1][0], route[i][1] - route[i-1][1]) if i > 0 else 0
+            else:
+                bearing = np.random.uniform(-np.pi/2, np.pi/2)
+            spd = 1.0 + np.random.normal(0, 0.15)
+            l += spd * 0.00001 * np.sin(bearing)
+            la += spd * 0.00001 * np.cos(bearing)
+            pts.append((l, la))
+        return pts
+
+    def make_stay():
+        pts = []
+        l, la = route[0]
+        for i in range(POINTS_PER_TRACK):
+            if i < 20:
+                spd = 1.0 + np.random.normal(0, 0.15)
+                l += spd * 0.00001 * 0.7
+                la += spd * 0.00001 * 0.7
+            else:
+                spd = 0 + np.random.normal(0, 0.02)
+                l += spd * 0.00001
+                la += spd * 0.00001
+            pts.append((l, la))
+        return pts
+
+    def make_speed():
+        pts = []
+        l, la = route[0]
+        for i in range(POINTS_PER_TRACK):
+            if i < 30:
+                spd = 1.0 + np.random.normal(0, 0.15)
+            else:
+                spd = 4.5 + np.random.normal(0, 0.3)
+            l += spd * 0.00001 * np.cos(0.3)
+            la += spd * 0.00001 * np.sin(0.3)
+            pts.append((l, la))
+        return pts
+
+    def make_wander():
+        pts = []
+        l, la = route[0]
+        bearing = 0
+        for i in range(POINTS_PER_TRACK):
+            bearing += np.random.uniform(-0.8, 0.8)
+            spd = 0.4 + np.random.normal(0, 0.1)
+            l += spd * 0.00001 * np.sin(bearing)
+            la += spd * 0.00001 * np.cos(bearing)
+            pts.append((l, la))
+        return pts
+
+    return {
+        "正常步行": (make_normal(), "#2ECC71"),
+        "轨迹偏离": (make_deviation(), "#E74C3C"),
+        "异常停留": (make_stay(), "#F39C12"),
+        "速度异常": (make_speed(), "#E74C3C"),
+        "徘徊": (make_wander(), "#9B59B6"),
+    }
+
+track_data = gen_track_data()
+
+num_plots = len(track_data)
+cols = 3
+rows = 2
+fig, axes = plt.subplots(rows, cols, figsize=(14, 8))
+axes_flat = axes.flatten()
+
+for idx, (name, (pts, color)) in enumerate(track_data.items()):
+    ax = axes_flat[idx]
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+
+    # 渐变颜色
+    steps = len(pts)
+    for i in range(steps - 1):
+        alpha = 0.3 + 0.7 * i / steps
+        ax.plot(xs[i:i+2], ys[i:i+2], color=color, alpha=alpha, linewidth=1.5)
+
+    # 起点和终点
+    ax.scatter(xs[0], ys[0], color="green", s=80, zorder=5, marker="o", label="起点")
+    ax.scatter(xs[-1], ys[-1], color="red", s=80, zorder=5, marker="X", label="终点")
+
+    ax.set_title(name, fontsize=13, fontweight="bold", color=color)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.legend(fontsize=7, loc="upper right")
+
+# 隐藏多余子图
+axes_flat[-1].set_visible(False)
+
+plt.suptitle("异常轨迹检测 — 5种轨迹类型对比\n(GPS轨迹 × 60秒 @1Hz)", fontsize=16, fontweight="bold", y=0.99)
+plt.tight_layout()
+plt.savefig("models/track_type_comparison.png", bbox_inches="tight")
+plt.close()
+print("  -> models/track_type_comparison.png")
+
+# ═══════════════════════════════════════════════════════════════════════════════
 print(f"\n{'='*60}")
 print("  全部图表生成完成！文件列表：")
 print(f"{'='*60}")
@@ -290,4 +478,4 @@ for f in sorted(os.listdir("models")):
     if f.endswith(".png"):
         size_kb = os.path.getsize(f"models/{f}") / 1024
         print(f"    models/{f} ({size_kb:.0f} KB)")
-print(f"\n  共 6 张图表，可直接截屏使用。")
+print(f"\n  共 9 张图表，可直接截屏使用。")
